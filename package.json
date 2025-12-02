@@ -22,16 +22,16 @@
     "ui-component",
     "vanilla-javascript"
   ],
-  "author": "Your Name <your.email@example.com>",
+  "author": "Ahmad Nadeem <ahmadnadeem509@gmail.com>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/csv-column-mapper.git"
+    "url": "https://github.com/AhmadNadeemS/csv-column-mapper.git"
   },
   "bugs": {
-    "url": "https://github.com/yourusername/csv-column-mapper/issues"
+    "url": "https://github.com/AhmadNadeemS/csv-column-mapper/issues"
   },
-  "homepage": "https://github.com/yourusername/csv-column-mapper#readme",
+  "homepage": "https://github.com/AhmadNadeemS/csv-column-mapper#readme",
   "files": [
     "dist/",
     "README.md",
