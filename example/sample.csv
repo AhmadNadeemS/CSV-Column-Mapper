@@ -1,0 +1,6 @@
+First Name,Last Name,Email Address,Phone Number,Dept
+John,Doe,john.doe@example.com,555-0101,Engineering
+Jane,Smith,jane.smith@example.com,555-0102,Marketing
+Bob,Johnson,invalid-email,555-0103,Sales
+Alice,Williams,alice.w@example.com,,HR
+,,empty.row@example.com,,

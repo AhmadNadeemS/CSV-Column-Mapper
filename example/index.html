@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSV Column Mapper - Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 600px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        p {
+            color: #666;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+
+        /* Custom button styling - users can style however they want */
+        .import-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 14px 32px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .import-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        }
+
+        .import-btn:active {
+            transform: translateY(0);
+        }
+
+        #output {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f5f5f5;
+            border-radius: 8px;
+            display: none;
+            max-height: 400px;
+            overflow: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>CSV Column Mapper Demo</h1>
+        <p>Click the button below to start importing your CSV file. You can customize fields, validation, and styling completely!</p>
+
+        <!-- Users can use ANY button they want -->
+        <button class="import-btn" id="import-btn">📊 Import CSV</button>
+
+        <div id="output"></div>
+    </div>
+
+    <script src="../dist/csv-mapper.js"></script>
+
+    <script>
+        // Example: Define your own custom fields with validation
+        const myCustomFields = [
+            {
+                key: 'firstName',
+                label: 'First Name',
+                required: true
+            },
+            {
+                key: 'lastName',
+                label: 'Last Name',
+                required: true
+            },
+            {
+                key: 'email',
+                label: 'Email Address',
+                required: true,
+                validate: (value) => {
+                    // Custom email validation
+                    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                    return emailRegex.test(value) ? true : 'Please enter a valid email address';
+                }
+            },
+            {
+                key: 'phone',
+                label: 'Phone Number',
+                required: false,
+                validate: (value) => {
+                    // Custom phone validation (optional)
+                    if (!value) return true;
+                    const phoneRegex = /^\+?[\d\s-()]+$/;
+                    return phoneRegex.test(value) ? true : 'Invalid phone number format';
+                }
+            },
+            {
+                key: 'department',
+                label: 'Department',
+                required: false
+            },
+            {
+                key: 'salary',
+                label: 'Salary',
+                required: false,
+                validate: (value) => {
+                    // Custom number validation
+                    if (!value) return true;
+                    const num = parseFloat(value.replace(/[^0-9.-]/g, ''));
+                    return !isNaN(num) && num >= 0 ? true : 'Salary must be a positive number';
+                }
+            }
+        ];
+
+        // Initialize the mapper with your custom configuration
+        const mapper = new CsvMapper('body', {
+            columns: myCustomFields,
+            onSubmit: (data) => {
+                console.log('✅ Imported Data:', data);
+
+                // Show the imported data
+                const output = document.getElementById('output');
+                output.style.display = 'block';
+                output.textContent = `Successfully imported ${data.length} row${data.length !== 1 ? 's' : ''}!\n\n${JSON.stringify(data, null, 2)}`;
+            }
+        });
+
+        // Attach to your own button
+        document.getElementById('import-btn').addEventListener('click', () => {
+            mapper.init();
+        });
+    </script>
+</body>
+</html>

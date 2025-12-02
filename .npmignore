@@ -1,0 +1,31 @@
+# Source files (only include dist/)
+src/
+
+# Examples
+example/
+
+# Development files
+node_modules/
+.DS_Store
+*.log
+npm-debug.log*
+
+# Build config
+webpack.config.js
+.babelrc
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test files
+test/
+tests/
+*.test.js
+*.spec.js
