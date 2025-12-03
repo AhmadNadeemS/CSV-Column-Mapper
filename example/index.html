@@ -44,21 +44,19 @@
 
         /* Custom button styling - users can style however they want */
         .import-btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #6366f1;
             color: white;
             border: none;
-            padding: 14px 32px;
+            padding: 12px 24px;
             font-size: 16px;
             font-weight: 600;
-            border-radius: 8px;
+            border-radius: 6px;
             cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            transition: background 0.2s;
         }
 
         .import-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+            background: #4f46e5;
         }
 
         .import-btn:active {
@@ -84,8 +82,9 @@
         <h1>CSV Column Mapper Demo</h1>
         <p>Click the button below to start importing your CSV file. You can customize fields, validation, and styling completely!</p>
 
-        <!-- Users can use ANY button they want -->
-        <button class="import-btn" id="import-btn">📊 Import CSV</button>
+        <!-- You can style your trigger button HOWEVER you want! -->
+        <!-- The library uses indigo theme by default, but you can customize via CSS variables -->
+        <button class="import-btn" id="import-btn">Upload CSV</button>
 
         <div id="output"></div>
     </div>
@@ -93,60 +92,47 @@
     <script src="../dist/csv-mapper.js"></script>
 
     <script>
-        // Example: Define your own custom fields with validation
-        const myCustomFields = [
+        // Example: Define fields exactly like the React version
+        const allFields = [
             {
                 key: 'firstName',
                 label: 'First Name',
-                required: true
+                required: true,
+                default: true
             },
             {
                 key: 'lastName',
                 label: 'Last Name',
-                required: true
+                required: true,
+                default: true
             },
             {
                 key: 'email',
                 label: 'Email Address',
                 required: true,
+                default: true,
                 validate: (value) => {
-                    // Custom email validation
                     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-                    return emailRegex.test(value) ? true : 'Please enter a valid email address';
+                    return emailRegex.test(value) ? true : 'Invalid email format';
                 }
             },
             {
                 key: 'phone',
-                label: 'Phone Number',
-                required: false,
-                validate: (value) => {
-                    // Custom phone validation (optional)
-                    if (!value) return true;
-                    const phoneRegex = /^\+?[\d\s-()]+$/;
-                    return phoneRegex.test(value) ? true : 'Invalid phone number format';
-                }
+                label: 'Phone Number'
             },
             {
                 key: 'department',
-                label: 'Department',
-                required: false
+                label: 'Department'
             },
             {
                 key: 'salary',
-                label: 'Salary',
-                required: false,
-                validate: (value) => {
-                    // Custom number validation
-                    if (!value) return true;
-                    const num = parseFloat(value.replace(/[^0-9.-]/g, ''));
-                    return !isNaN(num) && num >= 0 ? true : 'Salary must be a positive number';
-                }
+                label: 'Salary'
             }
         ];
 
-        // Initialize the mapper with your custom configuration
+        // Initialize the mapper
         const mapper = new CsvMapper('body', {
-            columns: myCustomFields,
+            columns: allFields,
             onSubmit: (data) => {
                 console.log('✅ Imported Data:', data);
 

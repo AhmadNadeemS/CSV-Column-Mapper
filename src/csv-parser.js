@@ -5,85 +5,228 @@ export default class CsvParser {
             quoteChar: '"',
             encoding: 'UTF-8'
         };
+        this.worker = null;
     }
 
-    /**
-     * Parse a File object or string content
-     * @param {File|string} input
-     * @param {Object} options
-     * @returns {Promise<Array<Array<string>>>}
-     */
-    async parse(input, options = {}) {
+    createWorker() {
+        const workerCode = `
+let cancelled = false;
+
+self.onmessage = (e) => {
+  const message = e.data;
+
+  if (message.type === 'cancel') {
+    cancelled = true;
+    return;
+  }
+
+  if (message.type === 'parse') {
+    cancelled = false;
+    try {
+      const rows = parseCSVChunk(
+        message.text,
+        message.delimiter,
+        message.quoteChar,
+        message.chunkIndex,
+        message.totalChunks
+      );
+
+      if (!cancelled) {
+        self.postMessage({
+          type: 'result',
+          rows,
+          chunkIndex: message.chunkIndex,
+          isComplete: message.chunkIndex === message.totalChunks - 1
+        });
+      }
+    } catch (error) {
+      if (!cancelled) {
+        self.postMessage({
+          type: 'error',
+          error: error.message || 'Unknown error'
+        });
+      }
+    }
+  }
+};
+
+function parseCSVChunk(text, delimiter, quoteChar, chunkIndex, totalChunks) {
+  const rows = [];
+  let currentRow = [];
+  let currentField = '';
+  let insideQuote = false;
+
+  text = text.replace(/\\r\\n/g, '\\n').replace(/\\r/g, '\\n');
+
+  for (let i = 0; i < text.length; i++) {
+    if (i % 1000 === 0 && cancelled) {
+      throw new Error('Parsing cancelled');
+    }
+
+    const char = text[i];
+    const nextChar = text[i + 1];
+
+    if (i % 50000 === 0) {
+      const percent = Math.round(
+        ((chunkIndex + i / text.length) / totalChunks) * 100
+      );
+      self.postMessage({
+        type: 'progress',
+        percent,
+        rowsParsed: rows.length,
+        chunkIndex
+      });
+    }
+
+    if (char === quoteChar) {
+      if (insideQuote && nextChar === quoteChar) {
+        currentField += quoteChar;
+        i++;
+      } else {
+        insideQuote = !insideQuote;
+      }
+    } else if (char === delimiter && !insideQuote) {
+      currentRow.push(currentField);
+      currentField = '';
+    } else if (char === '\\n' && !insideQuote) {
+      currentRow.push(currentField);
+      rows.push(currentRow);
+      currentRow = [];
+      currentField = '';
+    } else {
+      currentField += char;
+    }
+  }
+
+  if (currentField || currentRow.length > 0) {
+    currentRow.push(currentField);
+    rows.push(currentRow);
+  }
+
+  if (rows.length > 0 && rows[rows.length - 1].length === 1 && rows[rows.length - 1][0] === '') {
+    rows.pop();
+  }
+
+  return rows;
+}
+        `;
+
+        const blob = new Blob([workerCode], { type: 'application/javascript' });
+        return new Worker(URL.createObjectURL(blob));
+    }
+
+    async parse(input, options = {}, signal, onProgress) {
         const config = { ...this.defaultOptions, ...options };
 
-        let content = '';
-        if (input instanceof File) {
-            content = await this.readFile(input, config.encoding);
-        } else {
-            content = input;
+        if (signal?.aborted) {
+            throw new DOMException('Parsing was aborted', 'AbortError');
         }
 
-        return this.parseString(content, config);
-    }
+        this.worker = this.createWorker();
 
-    readFile(file, encoding) {
         return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = (e) => resolve(e.target.result);
-            reader.onerror = (e) => reject(e);
-            reader.readAsText(file, encoding);
+            const rows = [];
+            const CHUNK_SIZE = 1024 * 1024;
+
+            this.worker.onmessage = (e) => {
+                const message = e.data;
+
+                if (message.type === 'progress') {
+                    if (onProgress) {
+                        onProgress({
+                            percent: message.percent,
+                            rowsParsed: message.rowsParsed
+                        });
+                    }
+                } else if (message.type === 'result') {
+                    rows.push(...message.rows);
+
+                    if (message.isComplete) {
+                        this.cleanup();
+                        resolve(rows);
+                    }
+                } else if (message.type === 'error') {
+                    this.cleanup();
+                    reject(new Error(message.error));
+                }
+            };
+
+            this.worker.onerror = (e) => {
+                this.cleanup();
+                reject(new Error('Worker error: ' + e.message));
+            };
+
+            if (signal) {
+                signal.addEventListener('abort', () => {
+                    if (this.worker) {
+                        this.worker.postMessage({ type: 'cancel' });
+                        this.cleanup();
+                        reject(new DOMException('Parsing was aborted', 'AbortError'));
+                    }
+                });
+            }
+
+            try {
+                if (input instanceof File) {
+                    const totalChunks = Math.ceil(input.size / CHUNK_SIZE);
+                    let offset = 0;
+                    let chunkIndex = 0;
+
+                    const readNextChunk = () => {
+                        if (signal?.aborted) return;
+                        if (offset >= input.size) return;
+
+                        const chunk = input.slice(offset, offset + CHUNK_SIZE);
+                        const reader = new FileReader();
+
+                        reader.onload = (e) => {
+                            if (signal?.aborted) return;
+                            const text = e.target.result;
+
+                            this.worker.postMessage({
+                                type: 'parse',
+                                text,
+                                delimiter: config.delimiter || ',',
+                                quoteChar: config.quoteChar || '"',
+                                chunkIndex,
+                                totalChunks
+                            });
+
+                            offset += CHUNK_SIZE;
+                            chunkIndex++;
+                            readNextChunk();
+                        };
+
+                        reader.onerror = (e) => {
+                            this.cleanup();
+                            reject(e);
+                        };
+
+                        reader.readAsText(chunk, config.encoding);
+                    };
+
+                    readNextChunk();
+                } else {
+                    this.worker.postMessage({
+                        type: 'parse',
+                        text: input,
+                        delimiter: config.delimiter || ',',
+                        quoteChar: config.quoteChar || '"',
+                        chunkIndex: 0,
+                        totalChunks: 1
+                    });
+                }
+            } catch (err) {
+                this.cleanup();
+                reject(err);
+            }
         });
     }
 
-    parseString(text, config) {
-        const { delimiter, quoteChar } = config;
-        const rows = [];
-        let currentRow = [];
-        let currentField = '';
-        let insideQuote = false;
-
-        // Normalize line endings
-        text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-
-        for (let i = 0; i < text.length; i++) {
-            const char = text[i];
-            const nextChar = text[i + 1];
-
-            if (char === quoteChar) {
-                if (insideQuote && nextChar === quoteChar) {
-                    // Escaped quote
-                    currentField += quoteChar;
-                    i++;
-                } else {
-                    // Toggle quote status
-                    insideQuote = !insideQuote;
-                }
-            } else if (char === delimiter && !insideQuote) {
-                // End of field
-                currentRow.push(currentField);
-                currentField = '';
-            } else if (char === '\n' && !insideQuote) {
-                // End of row
-                currentRow.push(currentField);
-                rows.push(currentRow);
-                currentRow = [];
-                currentField = '';
-            } else {
-                currentField += char;
-            }
+    cleanup() {
+        if (this.worker) {
+            this.worker.terminate();
+            this.worker = null;
         }
-
-        // Push last field/row if exists
-        if (currentField || currentRow.length > 0) {
-            currentRow.push(currentField);
-            rows.push(currentRow);
-        }
-
-        // Remove empty last row if it exists (common in CSVs)
-        if (rows.length > 0 && rows[rows.length - 1].length === 1 && rows[rows.length - 1][0] === '') {
-            rows.pop();
-        }
-
-        return rows;
     }
 }

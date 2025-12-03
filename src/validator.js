@@ -1,6 +1,6 @@
 export default class Validator {
     constructor(templateFields) {
-        this.templateFields = templateFields; // Array of { key, label, required, validate(value) }
+        this.templateFields = templateFields;
     }
 
     /**

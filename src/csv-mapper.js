@@ -5,16 +5,27 @@ import './styles.css';
 
 export default class CsvMapper {
     constructor(selector, options = {}) {
+        // Determine active columns and available fields (matching React logic)
+        let activeColumns, availableFields;
+
+        if (options.availableFields) {
+            // Legacy behavior: use provided availableFields
+            activeColumns = options.columns || [];
+            availableFields = options.availableFields;
+        } else {
+            // New behavior: Filter default columns
+            const allFields = options.columns || [];
+            const defaults = allFields.filter(c => c.default);
+            // If no defaults specified, use all columns (legacy behavior)
+            activeColumns = defaults.length > 0 ? defaults : allFields;
+            availableFields = allFields;
+        }
+
         this.options = {
-            columns: [], // Active template fields
-            availableFields: [], // Pool of all available fields
+            columns: activeColumns,
+            availableFields: availableFields,
             ...options
         };
-
-        // If no available fields provided, use columns as the pool
-        if (this.options.availableFields.length === 0) {
-            this.options.availableFields = [...this.options.columns];
-        }
 
         this.state = {
             step: 1,
@@ -44,18 +55,58 @@ export default class CsvMapper {
             console.log('Mapper closed');
         });
 
-        this.ui.on('file-selected', async (file) => {
+        this.ui.on('file-selected', async ({ file, onProgress }) => {
             try {
-                const rows = await this.parser.parse(file);
+                // Add throttling to progress updates
+                let lastUpdate = 0;
+                const throttledProgress = (progress) => {
+                    const now = Date.now();
+                    if (now - lastUpdate > 100 || progress.percent === 100) {
+                        onProgress(progress);
+                        lastUpdate = now;
+                    }
+                };
+
+                const rows = await this.parser.parse(file, {}, null, throttledProgress);
+                this.ui.setLoading(false);
                 this.state.rawRows = rows;
                 this.state.step = 2;
-                // Default header to first row
                 this.state.headerRowIndex = 0;
                 this.updateStep();
             } catch (err) {
+                this.ui.setLoading(false);
                 console.error('Parse error', err);
-                alert('Error parsing file');
+                if (err.name !== 'AbortError') {
+                    this.ui.showError('Error parsing file. Please check the file format and try again.');
+                }
             }
+        });
+
+        this.ui.on('data-pasted', async ({ data, delimiter }) => {
+            this.ui.setLoading(true);
+            this.updateStep();
+            try {
+                const rows = await this.parser.parse(data, { delimiter }, null, null);
+                this.ui.setLoading(false);
+                this.state.rawRows = rows;
+                this.state.step = 2;
+                this.state.headerRowIndex = 0;
+                this.updateStep();
+            } catch (err) {
+                this.ui.setLoading(false);
+                console.error('Parse error', err);
+                if (err.name !== 'AbortError') {
+                    this.ui.showError('Error parsing pasted data. Please check the format and try again.');
+                }
+            }
+        });
+
+        this.ui.on('cancel-loading', () => {
+            if (this.parser.worker) {
+                this.parser.cleanup();
+            }
+            this.ui.setLoading(false);
+            this.updateStep();
         });
 
         this.ui.on('header-row-selected', (index) => {
@@ -81,6 +132,10 @@ export default class CsvMapper {
                     // Force all fields to be required
                     this.options.columns.push({ ...availableField, required: true });
                     this.state.mapping[key] = -1;
+                    // Update validator with new columns
+                    this.validator = new Validator(this.options.columns);
+                    // Tell UI to add the row dynamically instead of re-rendering
+                    this.ui.addMappingRow(availableField, this.state.headers, this.state.mapping);
                 }
             } else {
                 // Remove field
@@ -88,10 +143,12 @@ export default class CsvMapper {
                 if (index !== -1) {
                     this.options.columns.splice(index, 1);
                     delete this.state.mapping[key];
+                    // Update validator with new columns
+                    this.validator = new Validator(this.options.columns);
+                    // Tell UI to remove the row dynamically instead of re-rendering
+                    this.ui.removeMappingRow(key);
                 }
             }
-            // Re-render the mapping step
-            this.updateStep();
         });
 
         this.ui.on('prev', () => {

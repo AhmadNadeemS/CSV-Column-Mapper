@@ -1,7 +1,7 @@
 {
   "name": "csv-column-mapper",
-  "version": "1.0.0",
-  "description": "A powerful, flexible CSV parsing and column mapping library with a beautiful UI for building data import features",
+  "version": "2.0.0",
+  "description": "A powerful, production-ready vanilla JavaScript CSV import library with intelligent column mapping, real-time validation, and a beautiful, themeable UI",
   "main": "dist/csv-mapper.js",
   "scripts": {
     "build": "webpack --mode production",
